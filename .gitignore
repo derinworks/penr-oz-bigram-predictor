@@ -172,3 +172,17 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# JupyterLab
+.jupyterlab-debug.log
+
+# Others
+.DS_Store
+Thumbs.db
+
