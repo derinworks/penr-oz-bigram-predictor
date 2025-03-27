@@ -1,7 +1,8 @@
 # penr-oz-bigram-predictor
 Implementation of a Bigram Predictor for understanding next character prediction algorithms.
-Based on [makemore](https://github.com/karpathy/makemore)
-Using a [Neural Network service](https://github.com/derinworks/penr-oz-neural-network-torch)
+
+- Based on [makemore](https://github.com/karpathy/makemore)
+- Using a [Neural Network service](https://github.com/derinworks/penr-oz-neural-network-torch)
 
 ## Quickstart Guide
 
@@ -32,7 +33,7 @@ Using a [Neural Network service](https://github.com/derinworks/penr-oz-neural-ne
    ```
 
 4. **Neural Network Service**:
-Follow instructions on [penr-oz-neural-network-torch](https://github.com/derinworks/penr-oz-neural-network-torch?tab=readme-ov-file#quickstart-guide)
+   - **Follow instructions** on [penr-oz-neural-network-torch](https://github.com/derinworks/penr-oz-neural-network-torch?tab=readme-ov-file#quickstart-guide)
 
 5. **Run**:
    ```bash
