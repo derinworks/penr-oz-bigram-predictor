@@ -135,7 +135,7 @@ if __name__ == "__main__":
         i2s = {i: s for i, s in enumerate(tokens)}
 
         # Select first random token index besides word break
-        token_idx: int = random.randint(1, num_tokens)
+        token_idx: int = random.randint(1, num_tokens - 1)
 
         # Ask for number of words
         num_samples = int(input('How many samples would you like?'))
