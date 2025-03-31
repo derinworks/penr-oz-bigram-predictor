@@ -1,3 +1,4 @@
+import random
 import time
 import torch
 from requests import Response
@@ -13,20 +14,29 @@ model_request = {
 def get_one_hot_encoded(idx: int, total: int) -> list[float]:
     return one_hot(torch.tensor(idx, dtype=torch.int64), total).float().tolist()
 
-def request_prediction_progress() -> Response:
-    progress_resp = requests.get(f"{prediction_server_url}/progress/", params=model_request)
-    progress_status, progress_body = progress_resp.status_code, progress_resp.json()
-    print(f"{progress_status=}")
-    if progress_resp.status_code == 200:
-        if len(progress_body["progress"]) > 0:
-            costs = [progress["cost"] for progress in progress_body["progress"]]
-            cost = sum(costs) / len(costs)
-            avg_cost = progress_body["average_cost"]
-            print(f"{cost=}")
-            print(f"{avg_cost=}")
-    else: # barf possible error body
-        print(f"{progress_body=}")
-    return progress_resp
+def request_prediction_progress(min_num_progress = 0, timeout_secs = 30) -> Response:
+    # keep requesting until condition met or times out
+    for _ in range(timeout_secs):
+        # wait a second
+        time.sleep(1)
+        # check progress
+        progress_resp = requests.get(f"{prediction_server_url}/progress/", params=model_request)
+        progress_status, progress_body = progress_resp.status_code, progress_resp.json()
+        print(f"{progress_status=}")
+        if progress_resp.status_code == 200:
+            if len(progress_body["progress"]) > 0: # log info about progress
+                costs = [progress["cost"] for progress in progress_body["progress"]]
+                cost = sum(costs) / len(costs)
+                avg_cost = progress_body["average_cost"]
+                print(f"{cost=}")
+                print(f"{avg_cost=}")
+            if len(progress_body["progress"]) < min_num_progress:
+                continue # checking
+        else: # barf possible error body
+            print(f"{progress_body=}")
+        return progress_resp # done
+    # timed out
+    raise TimeoutError("Training took too long")
 
 def make_prediction(input_vector: list[float]) -> list[float]:
     prediction_request = model_request | {
@@ -43,16 +53,19 @@ def make_prediction(input_vector: list[float]) -> list[float]:
 
 if __name__ == "__main__":
     # User selection
-    user_selection = input('Choose (S) generate sample or (T) perform training:').upper()
+    user_selection = input('Choose (S) generate samples or (T) perform training:').upper()
     print(f"{user_selection=}")
 
     # Read example in
     with open("example.txt", "r", encoding="utf-8") as f:
         example = f.read()
+    example = example.lower() # work with lowercase only
 
     # Extract tokens
-    tokens = sorted(set(ch for ch in example.lower() if ch.isalpha()))
+    tokens = sorted(list(set(ch for ch in example if ch.isalpha())))
+    tokens.insert(0, " ") # space denotes word break
     num_tokens = len(tokens)
+    print(f"{num_tokens=}")
     s2i = {s: i for i, s in enumerate(tokens)}
 
     # Create prediction model if not already
@@ -60,7 +73,7 @@ if __name__ == "__main__":
     if model_resp.status_code == 404:
         create_model_request = model_request | {
             "layer_sizes": [num_tokens, num_tokens],
-            "weight_algo": "he",
+            "weight_algo": "gaussian",
             "bias_algo": "zeros",
             "activation_algos": ["softmax"],
         }
@@ -72,18 +85,22 @@ if __name__ == "__main__":
     # Perform according to user selection
     if user_selection == 'T':
         # Build training data
-        training_data = []
-        for sp in zip(example, example[1:]):
-            if all(s in s2i.keys() for s in sp):
-                training_data.append(tuple(get_one_hot_encoded(s2i[s], num_tokens) for s in sp))
+        training_data: list[tuple] = []
+        # Insert space in front and check no consecutive spaces
+        for sp in zip(" " + example, example):
+            if not all(s == " " for s in sp) and all(s in s2i.keys() for s in sp):
+                enc_input = get_one_hot_encoded(s2i[sp[0]], num_tokens)
+                label_idx = s2i[sp[1]]
+                training_data.append((enc_input, [label_idx]))
 
         # Prepare training request parameters
+        training_epochs = 10
         train_model_request = model_request | {
-            "epochs": 10,
-            "learning_rate": 0.1,
-            "decay_rate": 0.99,
+            "epochs": training_epochs,
+            "learning_rate": 0.005,
+            "decay_rate": 0.999,
             "dropout_rate": 0.0,
-            "l2_lambda": 0.0,
+            "l2_lambda": 0.01,
             "adam_beta1": 0.9,
             "adam_beta2": 0.999,
             "adam_epsilon": 1e-8,
@@ -109,7 +126,7 @@ if __name__ == "__main__":
             # wait a bit
             time.sleep(1)
             # check progress
-            request_prediction_progress()
+            request_prediction_progress(training_epochs)
             # mark end of training request
             print(f"###### Finished Training Round {i+1} of {num_trainings} ########")
 
@@ -117,23 +134,30 @@ if __name__ == "__main__":
         # Build reverse lookup
         i2s = {i: s for i, s in enumerate(tokens)}
 
-        # Select token
-        token_idx: int = torch.randint(0, num_tokens, (1,)).item()
+        # Select first random token index besides word break
+        token_idx: int = random.randint(1, num_tokens)
 
-        # Ask for sample length
-        sample_len = int(input('How long shall the sample be?'))
-        print(f"{sample_len=}")
+        # Ask for number of words
+        num_samples = int(input('How many samples would you like?'))
+        print(f"{num_samples=}")
 
         # Build prediction
         sample = i2s[token_idx]
-        for _ in range(sample_len - 1):
-            # Predict next token
-            output_vector = make_prediction(get_one_hot_encoded(token_idx, num_tokens))
-            output_idx: int = torch.multinomial(torch.tensor(output_vector), num_samples=1).item()
-            # Append next token
-            sample += i2s[output_idx]
-            # Set next token as current for next iteration
-            token_idx = output_idx
+        for _ in range(num_samples):
+            # Generate tokens until word break seen for chosen number of words
+            while len(sample) < 10: # avoid really long samples
+                # Predict next token
+                output_vector = make_prediction(get_one_hot_encoded(token_idx, num_tokens))
+                output_idx: int = torch.multinomial(torch.tensor(output_vector), num_samples=1).item()
+                # Check word break
+                if output_idx == 0:
+                    break
+                # Append next token
+                sample += i2s[output_idx]
+                # Set next token as current for next iteration except word break
+                token_idx = output_idx
+            # Present sample
+            print(f"{sample=}")
+            # Reset sample
+            sample = ""
 
-        # Present sample
-        print(f"{sample=}")
