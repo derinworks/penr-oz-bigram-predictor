@@ -134,16 +134,15 @@ if __name__ == "__main__":
         # Build reverse lookup
         i2s = {i: s for i, s in enumerate(tokens)}
 
-        # Select first random token index besides word break
-        token_idx: int = random.randint(1, num_tokens - 1)
-
         # Ask for number of words
         num_samples = int(input('How many samples would you like?'))
         print(f"{num_samples=}")
 
         # Build prediction
-        sample = i2s[token_idx]
+        token_idx = 0
         for _ in range(num_samples):
+            # Reset sample
+            sample = ""
             # Generate tokens until word break seen for chosen number of words
             while len(sample) < 10: # avoid really long samples
                 # Predict next token
@@ -158,6 +157,3 @@ if __name__ == "__main__":
                 token_idx = output_idx
             # Present sample
             print(f"{sample=}")
-            # Reset sample
-            sample = ""
-
