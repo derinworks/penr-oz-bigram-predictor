@@ -86,12 +86,17 @@ if __name__ == "__main__":
     if user_selection == 'T':
         # Build training data
         training_data: list[tuple] = []
-        # Insert space in front and check no consecutive spaces
-        for sp in zip(" " + example, example):
-            if not all(s == " " for s in sp) and all(s in s2i.keys() for s in sp):
-                enc_input = get_one_hot_encoded(s2i[sp[0]], num_tokens)
-                label_idx = s2i[sp[1]]
+        # Start with word break as input
+        input_idx = 0
+        for s in example:
+            label_idx = s2i[s]
+            # check no consecutive spaces and token is in vocabulary
+            if not all(idx == 0 for idx in [input_idx, label_idx]) and s in s2i.keys():
+                # add to encoded input and target label to training data
+                enc_input = get_one_hot_encoded(input_idx, num_tokens)
                 training_data.append((enc_input, [label_idx]))
+                # next input is the label
+                input_idx = label_idx
 
         # Prepare training request parameters
         training_epochs = 10
@@ -148,12 +153,12 @@ if __name__ == "__main__":
                 # Predict next token
                 output_vector = make_prediction(get_one_hot_encoded(token_idx, num_tokens))
                 output_idx: int = torch.multinomial(torch.tensor(output_vector), num_samples=1).item()
+                # Set next token as current for next prediction
+                token_idx = output_idx
                 # Check word break
                 if output_idx == 0:
                     break
                 # Append next token
                 sample += i2s[output_idx]
-                # Set next token as current for next iteration except word break
-                token_idx = output_idx
             # Present sample
             print(f"{sample=}")
